@@ -1,6 +1,0 @@
-pytest
-flake8
-requests
-bs4
-dmglib
-blender-addon-tester

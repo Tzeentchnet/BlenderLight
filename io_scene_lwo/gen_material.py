@@ -16,11 +16,10 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
+# Copyright (C) 2026 Kenneth Peters
+
 import os
 import bpy
-
-# from .NodeArrange import nodemargin, ArrangeNodesOp, values
-
 
 class _material:
     __slots__ = (

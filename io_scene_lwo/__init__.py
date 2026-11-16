@@ -16,35 +16,9 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-# Copyright (c) Ken Nign 2010
-# ken@virginpi.com
-#
-# Version 1.3 - Aug 11, 2011
-#
-# Loads a LightWave .lwo object file, including the vertex maps such as
-# UV, Morph, Color and Weight maps.
-#
-# Will optionally create an Armature from an embedded Skelegon rig.
-#
-# Point orders are maintained so that .mdds can exchanged with other
-# 3D programs.
-#
-#
-# Notes:
-# NGons, polygons with more than 4 points are supported, but are
-# added (as triangles) after the vertex maps have been applied. Thus they
-# won't contain all the vertex data that the original ngon had.
-#
-# Blender is limited to only 8 UV Texture and 8 Vertex Color maps,
-# thus only the first 8 of each can be imported.
-#
-# History:
-#
-# 1.3 Fixed CC Edge Weight loading.
-#
-# 1.2 Added Absolute Morph and CC Edge Weight support.
-#     Made edge creation safer.
-# 1.0 First Release
+# Copyright (C) 2010 Ken Nign
+# Copyright (C) 2026 Kenneth Peters
+
 import bpy
 from bpy_extras.io_utils import ImportHelper, poll_file_object_drop
 from bpy.types import Operator
@@ -55,7 +29,7 @@ from .construct_mesh import build_objects
 
 bl_info = {
     "name": "BlenderLight: LightWave Object Importer",
-    "author": "Dave Keeshan, Ken Nign (Ken9) and Gert De Roost",
+    "author": "Kenneth Peters, Dave Keeshan, Ken Nign (Ken9), Gert De Roost",
     "version": (2, 0, 0),
     "blender": (5, 2, 0),
     "location": "File > Import > LightWave Object (.lwo)",

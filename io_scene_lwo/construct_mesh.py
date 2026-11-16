@@ -16,6 +16,8 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
+# Copyright (C) 2026 Kenneth Peters
+
 import bpy
 import mathutils
 import numpy as np

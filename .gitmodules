@@ -1,9 +1,0 @@
-[submodule "tests/lwo_phobos"]
-	path = tests/lwo_phobos
-	url = https://github.com/nangtani/lwo_phobos.git
-[submodule "tests/lwo_nasa"]
-	path = tests/lwo_nasa
-	url = https://github.com/nangtani/lwo_nasa.git
-[submodule "tests/lwo_bulk"]
-	path = tests/lwo_bulk
-	url = https://github.com/nangtani/lwo_bulk.git

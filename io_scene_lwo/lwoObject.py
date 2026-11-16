@@ -16,6 +16,8 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
+# Copyright (C) 2026 Kenneth Peters
+
 import os
 import struct
 import re
