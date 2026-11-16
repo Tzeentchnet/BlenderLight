@@ -51,15 +51,19 @@ After installation, use **File > Import > LightWave Object (.lwo)** or drag an
 
 ## Development and tests
 
-The checked-in fixture corpus covers LWOB, LWO2, and LWO3 objects. To run the
-add-on test harness:
+The checked-in fixture corpus covers LWOB, LWO2, and LWO3 objects. Run the
+dependency-free Blender validation suite with Blender 5.2:
 
 ```powershell
-python -m pip install -r blender_requirements.txt
-python scripts\test_addon.py io_scene_lwo 5.2
+& "D:\Blender Foundation\Blender 5.2\blender.exe" `
+  --background `
+  --factory-startup `
+  --python scripts\validate_blender52.py
 ```
 
-CI runs the suite on Blender 5.2 for Windows and Linux.
+The suite imports every fixture and checks LWO3 materials and UV textures,
+Blender 5.2 color attributes, and custom normals. CI runs it on Blender 5.2
+for Windows and Linux.
 
 ## Current limitations
 

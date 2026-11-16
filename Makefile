@@ -1,13 +1,16 @@
 BLENDER_VERSION ?= 5.2
 BLENDER_ADDON ?= io_scene_lwo
+BLENDER ?= blender
 
 default:
 	@echo $(BLENDER_VERSION)
 	$(MAKE) flake8
-	python scripts/test_addon.py $(BLENDER_ADDON) $(BLENDER_VERSION)
+	$(MAKE) test
 
-all:
-	python scripts/test_addon.py $(BLENDER_ADDON) 5.2
+all: default
+
+test:
+	"$(BLENDER)" --background --factory-startup --python scripts/validate_blender52.py
 
 # get:
 # # 	python3 scripts.old/get_blender.py 3.6.21
