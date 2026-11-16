@@ -249,7 +249,12 @@ def _set_custom_normals(
     _normalize(vertex_normals)
 
     if not layer_data.lnorms:
-        mesh.normals_split_custom_set_from_vertices(vertex_normals)
+        normal_attribute = mesh.attributes.new(
+            name="custom_normal",
+            type="FLOAT_VECTOR",
+            domain="POINT",
+        )
+        normal_attribute.data.foreach_set("vector", vertex_normals.ravel())
         return
 
     loop_normals = vertex_normals[loop_vertices].copy()
@@ -267,7 +272,13 @@ def _set_custom_normals(
             loop_index = polygon_loops.get(point_id)
             if loop_index is not None:
                 loop_normals[loop_index] = (x, y, z)
-    mesh.normals_split_custom_set(_normalize(loop_normals))
+    _normalize(loop_normals)
+    normal_attribute = mesh.attributes.new(
+        name="custom_normal",
+        type="FLOAT_VECTOR",
+        domain="CORNER",
+    )
+    normal_attribute.data.foreach_set("vector", loop_normals.ravel())
 
 
 def _set_edge_creases(mesh, edge_weights):

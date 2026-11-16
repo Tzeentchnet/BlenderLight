@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         blender-version: ["5.2.4"]
-        os: [ubuntu-24.04, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     env:
       BLENDER_CACHE: ${{ github.workspace }}/.blender
       BLENDER_MIRROR: https://ftp.nluug.nl/pub/graphics/blender/release/Blender5.2

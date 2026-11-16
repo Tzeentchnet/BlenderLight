@@ -63,4 +63,7 @@ def test_blender52_custom_normals():
     )
     mesh_object = next(obj for obj in objects if obj.type == "MESH")
 
+    custom_normals = mesh_object.data.attributes["custom_normal"]
+    assert custom_normals.domain == "CORNER"
+    assert custom_normals.data_type == "FLOAT_VECTOR"
     assert mesh_object.data.has_custom_normals

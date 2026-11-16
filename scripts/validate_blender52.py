@@ -98,6 +98,13 @@ def validate_custom_normals():
     mesh = import_fixture(
         "tests/assimp/src/LWO/LWO2/ModoExport_vertNormals.lwo"
     )[0].data
+    attribute = mesh.attributes.get("custom_normal")
+    require(attribute is not None, "custom_normal attribute is missing")
+    require(attribute.domain == "CORNER", "custom normals should use CORNER domain")
+    require(
+        attribute.data_type == "FLOAT_VECTOR",
+        "custom normals should use FLOAT_VECTOR data",
+    )
     require(mesh.has_custom_normals, "custom vertex normals are missing")
 
 
