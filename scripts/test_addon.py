@@ -16,7 +16,7 @@ def main():
     if len(sys.argv) > 2:
         blender_rev = sys.argv[2]
     else:
-        blender_rev = "3.2"
+        blender_rev = "5.2"
 
     if os.path.isdir("scripts"):
         os.environ["ADDON_TEST_HELPER"] = os.path.join(os.getcwd(), "scripts")

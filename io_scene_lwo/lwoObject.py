@@ -19,7 +19,6 @@
 import os
 import struct
 import re
-from glob import glob
 from pprint import pprint
 from collections import OrderedDict
 from .chunk import Chunk
@@ -123,6 +122,9 @@ class _obj_surf(_lwo_base):
         "bump",
         "strs",
         "smooth",
+        "rough",
+        "metal",
+        "double_sided",
         "textures",
         "textures_5",
     )
@@ -145,6 +147,9 @@ class _obj_surf(_lwo_base):
         self.bump = 1.0  # Bump
         self.strs = 0.0  # Smooth Threshold
         self.smooth = False  # Surface Smoothing
+        self.rough = None
+        self.metal = 0.0
+        self.double_sided = False
         self.textures = {}  # Textures list
         self.textures_5 = []  # Textures list for LWOB
 
@@ -234,6 +239,8 @@ def read_lwostring(raw_name):
     """Parse a zero-padded string."""
 
     i = raw_name.find(b"\0")
+    if i < 0:
+        raise ValueError("Unterminated LightWave string")
     name_len = i + 1
     if name_len % 2 == 1:  # Test for oddness.
         name_len += 1
@@ -249,10 +256,14 @@ def read_lwostring(raw_name):
 
 def read_vx(pointdata):
     """Read a variable-length index."""
+    if len(pointdata) < 2:
+        raise ValueError("Truncated LightWave variable-length index")
     if pointdata[0] != 255:
         index = pointdata[0] * 256 + pointdata[1]
         size = 2
     else:
+        if len(pointdata) < 4:
+            raise ValueError("Truncated LightWave variable-length index")
         index = pointdata[1] * 65536 + pointdata[2] * 256 + pointdata[3]
         size = 4
 
@@ -402,7 +413,7 @@ def read_colmap(col_bytes, object_layers):
             offset += pnt_id_len
             col = struct.unpack(">ffff", col_bytes[offset : offset + 16])
             offset += 16
-            colors[pnt_id] = (col[0], col[1], col[2])
+            colors[pnt_id] = col
 
     if name in object_layers[-1].colmaps:
         if "PointMap" in object_layers[-1].colmaps[name]:
@@ -467,9 +478,9 @@ def read_color_vmad(col_bytes, object_layers, last_pols_count):
             col = struct.unpack(">ffff", col_bytes[offset : offset + 16])
             offset += 16
             if pol_id in colors:
-                colors[pol_id][pnt_id] = (col[0], col[1], col[2])
+                colors[pol_id][pnt_id] = col
             else:
-                colors[pol_id] = dict({pnt_id: (col[0], col[1], col[2])})
+                colors[pol_id] = dict({pnt_id: col})
 
     if name in object_layers[-1].colmaps:
         if "FaceMap" in object_layers[-1].colmaps[name]:
@@ -605,6 +616,7 @@ def read_pols(pol_bytes, object_layers):
 
     while offset < pols_count:
         (pnts_count,) = struct.unpack(">H", pol_bytes[offset : offset + 2])
+        pnts_count &= 0x03FF
         offset += 2
         all_face_pnts = []
         for j in range(pnts_count):
@@ -714,10 +726,249 @@ def read_surf_tags(tag_bytes, object_layers, last_pols_count):
 
 
 def read_clip(clip_bytes, lwo):
-    """Read texture clip path"""
+    """Read an LWO2 texture clip path."""
+    if len(clip_bytes) < 4:
+        raise ValueError("Truncated LWO2 CLIP chunk")
+
     c_id = struct.unpack(">L", clip_bytes[0:4])[0]
-    orig_path, path_len = read_lwostring(clip_bytes[10:])
-    lwo.clips[c_id] = orig_path
+    offset = 4
+    while offset + 6 <= len(clip_bytes):
+        subchunk_name = clip_bytes[offset : offset + 4]
+        subchunk_len = struct.unpack(">H", clip_bytes[offset + 4 : offset + 6])[0]
+        offset += 6
+        end = offset + subchunk_len
+        if end > len(clip_bytes):
+            raise ValueError("Truncated LWO2 CLIP subchunk")
+        if subchunk_name == b"STIL":
+            orig_path, _ = read_lwostring(clip_bytes[offset:end])
+            lwo.clips[c_id] = orig_path
+            return
+        offset = end + (subchunk_len & 1)
+
+
+def _iter_lwo3_blocks(data):
+    """Yield 32-bit LWO3 blocks from a form body."""
+    offset = 0
+    while offset + 8 <= len(data):
+        block_name = data[offset : offset + 4]
+        block_len = struct.unpack(">L", data[offset + 4 : offset + 8])[0]
+        data_start = offset + 8
+        data_end = data_start + block_len
+        if data_end > len(data):
+            raise ValueError(f"Truncated LWO3 block {block_name!r}")
+        yield block_name, data[data_start:data_end]
+        offset = data_end + (block_len & 1)
+
+    if offset != len(data):
+        raise ValueError("Trailing bytes in LWO3 form")
+
+
+def _find_lwo3_blocks(data, block_name):
+    """Find validated blocks in nested LWO3 form data."""
+    offset = 0
+    while True:
+        offset = data.find(block_name, offset)
+        if offset < 0:
+            return
+        if offset + 8 <= len(data):
+            block_len = struct.unpack(">L", data[offset + 4 : offset + 8])[0]
+            data_start = offset + 8
+            data_end = data_start + block_len
+            if data_end <= len(data):
+                yield data[data_start:data_end]
+        offset += 4
+
+
+def _find_lwo3_forms(data, form_type):
+    for form_data in _find_lwo3_blocks(data, b"FORM"):
+        if len(form_data) >= 4 and form_data[:4] == form_type:
+            yield form_data[4:]
+
+
+def _read_lwo3_value(value_form):
+    blocks = list(_iter_lwo3_blocks(value_form))
+    if not blocks:
+        return None
+
+    value_type, value_type_len = read_lwostring(blocks[0][1])
+    inline_value = blocks[0][1][value_type_len:]
+
+    if value_type == "double":
+        if len(inline_value) < 8:
+            return None
+        return struct.unpack(">d", inline_value[:8])[0]
+    if value_type == "int":
+        if len(inline_value) < 4:
+            return None
+        return struct.unpack(">L", inline_value[:4])[0]
+    if value_type not in {"vparam", "vparam3"}:
+        return None
+
+    for block_name, block_data in blocks[1:]:
+        if block_name != b"FORM" or len(block_data) < 4 or block_data[:4] != b"VALU":
+            continue
+        inner_blocks = list(_iter_lwo3_blocks(block_data[4:]))
+        if not inner_blocks or len(inner_blocks[0][1]) < 4:
+            return None
+        payload = inner_blocks[0][1]
+        count = struct.unpack(">L", payload[:4])[0]
+        if count == 0 or count > 16 or len(payload) < 4 + count * 8:
+            return None
+        values = struct.unpack(f">{count}d", payload[4 : 4 + count * 8])
+        return values[0] if count == 1 else values
+
+    return None
+
+
+def _read_lwo3_entry(entry_data):
+    name = None
+    value = None
+
+    for block_name, block_data in _iter_lwo3_blocks(entry_data):
+        if block_name == b"NAME":
+            name, _ = read_lwostring(block_data)
+        elif block_name == b"FORM" and len(block_data) >= 4 and block_data[:4] == b"VALU":
+            value = _read_lwo3_value(block_data[4:])
+
+    return name, value
+
+
+def _read_lwo3_texture(entry_data, default_channel):
+    image_chunks = list(_find_lwo3_blocks(entry_data, b"IMAG"))
+    if not image_chunks:
+        return None
+
+    texture = _surf_texture()
+    texture.channel = default_channel
+    texture.clipid, _ = read_vx(image_chunks[-1])
+    if texture.clipid == 0:
+        return None
+
+    vmap_chunks = list(_find_lwo3_blocks(entry_data, b"VMAP"))
+    if vmap_chunks:
+        texture.uvname, _ = read_lwostring(vmap_chunks[-1])
+
+    projection_chunks = list(_find_lwo3_blocks(entry_data, b"PROJ"))
+    if projection_chunks and len(projection_chunks[-1]) >= 2:
+        texture.projection = struct.unpack(">H", projection_chunks[-1][:2])[0]
+
+    enabled_chunks = list(_find_lwo3_blocks(entry_data, b"ENAB"))
+    if enabled_chunks and len(enabled_chunks[-1]) >= 2:
+        texture.enab = bool(struct.unpack(">H", enabled_chunks[-1][:2])[0])
+
+    negative_chunks = list(_find_lwo3_blocks(entry_data, b"NEGA"))
+    if negative_chunks and len(negative_chunks[-1]) >= 2:
+        texture.nega = bool(struct.unpack(">H", negative_chunks[-1][:2])[0])
+
+    return texture
+
+
+def read_clip_3(clip_bytes, lwo):
+    """Read an LWO3 CLIP form."""
+    c_id = None
+    image_path = None
+
+    for block_name, block_data in _iter_lwo3_blocks(clip_bytes):
+        if block_name == b"    " and len(block_data) >= 4 and c_id is None:
+            c_id = struct.unpack(">L", block_data[:4])[0]
+        elif block_name == b"FORM" and len(block_data) >= 4 and block_data[:4] == b"STIL":
+            for still_name, still_data in _iter_lwo3_blocks(block_data[4:]):
+                if still_name == b"    ":
+                    image_path, _ = read_lwostring(still_data)
+                    break
+
+    if c_id is None or image_path is None:
+        raise ValueError("Malformed LWO3 CLIP form")
+    lwo.clips[c_id] = image_path
+
+
+def read_surf_3(surf_bytes, lwo):
+    """Read LWO3 nodal and legacy surface values."""
+    if len(surf_bytes) < 8:
+        raise ValueError("Truncated LWO3 SURF form")
+
+    offset = 8
+    surf = _obj_surf()
+    surf.name, name_len = read_lwostring(surf_bytes[offset:])
+    offset += name_len
+    surf.source_name, source_len = read_lwostring(surf_bytes[offset:])
+    offset += source_len
+    surface_data = surf_bytes[offset:]
+
+    scalar_chunks = {
+        b"DIFF": "diff",
+        b"LUMI": "lumi",
+        b"SPEC": "spec",
+        b"REFL": "refl",
+        b"RBLR": "rblr",
+        b"TRAN": "tran",
+        b"RIND": "rind",
+        b"TBLR": "tblr",
+        b"TRNL": "trnl",
+        b"GLOS": "glos",
+        b"SHRP": "shrp",
+        b"BUMP": "bump",
+    }
+    color_chunks = list(_find_lwo3_blocks(surface_data, b"COLR"))
+    if color_chunks and len(color_chunks[-1]) >= 12:
+        surf.colr = list(struct.unpack(">fff", color_chunks[-1][:12]))
+    for chunk_name, attribute in scalar_chunks.items():
+        chunks = list(_find_lwo3_blocks(surface_data, chunk_name))
+        if chunks and len(chunks[-1]) >= 4:
+            setattr(surf, attribute, struct.unpack(">f", chunks[-1][:4])[0])
+
+    smoothing_chunks = list(_find_lwo3_blocks(surface_data, b"SMAN"))
+    if smoothing_chunks and len(smoothing_chunks[-1]) >= 4:
+        smoothing_angle = struct.unpack(">f", smoothing_chunks[-1][:4])[0]
+        surf.smooth = smoothing_angle >= 0.0
+
+    side_chunks = list(_find_lwo3_blocks(surface_data, b"SIDE"))
+    if side_chunks and len(side_chunks[-1]) >= 2:
+        surf.double_sided = struct.unpack(">H", side_chunks[-1][:2])[0] == 3
+
+    entry_properties = {
+        "Color": "colr",
+        "Diffuse": "diff",
+        "Luminosity": "lumi",
+        "Specular": "spec",
+        "Glossiness": "glos",
+        "Roughness": "rough",
+        "Reflection": "refl",
+        "Metallic": "metal",
+        "Transparency": "tran",
+        "Refraction Index": "rind",
+        "Refraction Blur": "tblr",
+        "Translucency": "trnl",
+        "Diffuse Sharpness": "shrp",
+        "Bump Height": "bump",
+    }
+    texture_channels = {
+        "Color": "COLR",
+        "Diffuse": "DIFF",
+        "Luminosity": "LUMI",
+        "Specular": "SPEC",
+        "Reflection": "REFL",
+        "Transparency": "TRAN",
+        "Bump": "BUMP",
+    }
+
+    for entry_data in _find_lwo3_forms(surface_data, b"ENTR"):
+        entry_name, value = _read_lwo3_entry(entry_data)
+        attribute = entry_properties.get(entry_name)
+        if attribute is not None and value is not None:
+            if attribute == "colr":
+                if isinstance(value, tuple) and len(value) >= 3:
+                    surf.colr = list(value[:3])
+            elif not isinstance(value, tuple):
+                setattr(surf, attribute, value)
+
+        channel = texture_channels.get(entry_name)
+        if channel is not None:
+            texture = _read_lwo3_texture(entry_data, channel)
+            if texture is not None:
+                surf.textures.setdefault(channel, []).append(texture)
+
+    lwo.surfs[surf.name] = surf
 
 
 def read_texture(surf_bytes, offset, subchunk_len, debug=False):
@@ -1119,25 +1370,33 @@ class lwoObject:
     def read(self, ch):
         self.ch = ch
 
-        self.f = open(self.filename, "rb")
-        try:
-            header, chunk_size, chunk_name = struct.unpack(">4s1L4s", self.f.read(12))
-        except:
-            print(f"Error parsing file header! Filename {self.filename}")
-            self.f.close()
-            return
+        with open(self.filename, "rb") as lwo_file:
+            self.f = lwo_file
+            try:
+                header_data = self.f.read(12)
+                if len(header_data) != 12:
+                    raise lwoUnsupportedFileException(
+                        f"Truncated LWO file header: {self.filename}"
+                    )
+                header, chunk_size, chunk_name = struct.unpack(">4s1L4s", header_data)
+                if header != b"FORM":
+                    raise lwoUnsupportedFileException(
+                        f"Invalid LWO FORM header: {self.filename}"
+                    )
 
-        if chunk_name == b"LWO2":
-            self.read_lwo2()
-        elif chunk_name == b"LWOB" or chunk_name == b"LWLO":
-            # LWOB and LWLO are the old format, LWLO is a layered object.
-            self.read_lwob()
-        else:
-            self.f.close()
-            msg = "Invalid LWO File Type: {}".format(self.filename)
-            raise lwoUnsupportedFileException(msg)
-        self.f.close()
-        del self.f
+                if chunk_name == b"LWO2":
+                    self.read_lwo2()
+                elif chunk_name == b"LWO3":
+                    self.read_lwo2("LWO3")
+                elif chunk_name == b"LWOB" or chunk_name == b"LWLO":
+                    # LWOB and LWLO are the old format, LWLO is a layered object.
+                    self.read_lwob()
+                else:
+                    raise lwoUnsupportedFileException(
+                        f"Invalid LWO File Type {chunk_name!r}: {self.filename}"
+                    )
+            finally:
+                del self.f
 
     def pprint(self):
 
@@ -1168,28 +1427,40 @@ class lwoObject:
         return paths
 
     def resolve_clips(self):
-        files = []
+        files = {}
         for search_path in self.search_paths:
-            files.extend(glob("{0}/*.*".format(search_path)))
+            if not os.path.isdir(search_path):
+                continue
             if self.ch.recursive:
-                files.extend(glob("{0}/**/*.*".format(search_path)))
+                entries = (
+                    os.path.join(root, filename)
+                    for root, _, filenames in os.walk(search_path)
+                    for filename in filenames
+                )
+            else:
+                entries = (
+                    entry.path
+                    for entry in os.scandir(search_path)
+                    if entry.is_file()
+                )
+            for filepath in entries:
+                files.setdefault(os.path.basename(filepath).casefold(), filepath)
 
         for c_id in self.clips:
             clip = self.clips[c_id]
-            # LW is windows tools, so windows path need to be replaced
-            # under linux, and treated the sameunder windows
+            normalized_clip = clip.replace("\\", os.sep).replace("/", os.sep)
             imagefile = os.path.basename(clip.replace("\\", os.sep))
-            ifile = None
-            for f in files:
-                if re.search(re.escape(imagefile), f, re.I):
-                    if self.absfilepath:
-                        ifile = os.path.abspath(f)
-                    else:
-                        ifile = os.path.relpath(f)
-
-                    if ifile not in self.images:
-                        self.images.append(ifile)
-                    continue
+            direct_path = normalized_clip
+            if not os.path.isabs(direct_path):
+                direct_path = os.path.join(self.dirpath, direct_path)
+            if os.path.isfile(direct_path):
+                ifile = direct_path
+            else:
+                ifile = files.get(imagefile.casefold())
+            if ifile is not None:
+                ifile = os.path.abspath(ifile) if self.absfilepath else os.path.relpath(ifile)
+                if ifile not in self.images:
+                    self.images.append(ifile)
             self.ch.images[c_id] = ifile
 
         for c_id in self.clips:
@@ -1215,12 +1486,12 @@ class lwoObject:
                 ci = texture.id
                 texture.image = self.ch.images[ci]
 
-    def read_lwo2(self):
-        """Read version 2 file, LW 6+."""
+    def read_lwo2(self, format_name="LWO2"):
+        """Read LWO2 geometry and LWO3's compatible geometry chunks."""
         self.handle_layer = True
         self.last_pols_count = 0
         self.just_read_bones = False
-        print(f"Importing LWO: {self.filename}\nLWO v2 Format")
+        print(f"Importing LWO: {self.filename}\n{format_name} Format")
 
         while True:
             try:
@@ -1315,6 +1586,17 @@ class lwoObject:
                 read_surf(rootchunk.read(), self)
             elif rootchunk.chunkname == b"CLIP":
                 read_clip(rootchunk.read(), self)
+            elif rootchunk.chunkname == b"FORM" and format_name == "LWO3":
+                form_data = rootchunk.read()
+                if len(form_data) < 4:
+                    raise ValueError("Truncated LWO3 FORM")
+                form_type = form_data[:4]
+                if form_type == b"SURF":
+                    read_surf_3(form_data[4:], self)
+                elif form_type == b"CLIP":
+                    read_clip_3(form_data[4:], self)
+                else:
+                    print(f"Skipping LWO3 Form: {form_type}")
             elif rootchunk.chunkname == b"BBOX":
                 rootchunk.skip()  # SKIPPING
             elif rootchunk.chunkname == b"VMPA":

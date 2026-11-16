@@ -26,6 +26,26 @@ def test_load_lwo_box3_uv_layers():
     load_lwo(infile)
 
 
+def test_load_lwo3_box1():
+    infile = "tests/basic/src/LWO3/box/box1.lwo"
+    load_lwo(infile)
+
+
+def test_load_lwo3_box1_uv():
+    infile = "tests/basic/src/LWO3/box/box1-uv.lwo"
+    load_lwo(infile)
+
+
+def test_load_lwo3_box2_uv():
+    infile = "tests/basic/src/LWO3/box/box2-uv.lwo"
+    load_lwo(infile)
+
+
+def test_load_lwo3_box3_uv_layers():
+    infile = "tests/basic/src/LWO3/box/box3-uv-layers.lwo"
+    load_lwo(infile)
+
+
 def test_load_lwo_box5_ngon():
     infile = "tests/basic/src/LWO2/box/box5-ngon.lwo"
     load_lwo(infile)
@@ -54,4 +74,3 @@ def test_load_lwo_basic_name():
 def test_load_lwo_advance_name():
     infile = "tests/basic/src/LWO2/naming/box1.lwo"
     load_lwo(infile, search_paths=["../images"],)
-

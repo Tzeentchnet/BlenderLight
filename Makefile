@@ -1,4 +1,4 @@
-BLENDER_VERSION ?= 3.6
+BLENDER_VERSION ?= 5.2
 BLENDER_ADDON ?= io_scene_lwo
 
 default:
@@ -7,11 +7,7 @@ default:
 	python scripts/test_addon.py $(BLENDER_ADDON) $(BLENDER_VERSION)
 
 all:
-	python scripts/test_addon.py $(BLENDER_ADDON) 3.3
-	python scripts/test_addon.py $(BLENDER_ADDON) 3.6
-	python scripts/test_addon.py $(BLENDER_ADDON) 4.3
-	python scripts/test_addon.py $(BLENDER_ADDON) 4.4
-	python scripts/test_addon.py $(BLENDER_ADDON) 4.5
+	python scripts/test_addon.py $(BLENDER_ADDON) 5.2
 
 # get:
 # # 	python3 scripts.old/get_blender.py 3.6.21
@@ -36,7 +32,7 @@ format:
 
 checks: format lint mypy
 
-GIT_TAG?=1.4.7
+GIT_TAG?=2.0.0
 GIT_TAGX:=$(shell echo "$(GIT_TAG)" | sed 's/\./, /g')
 VERSION_FILE?=`find . -name version.py`
 release:
@@ -48,7 +44,7 @@ version = "${GIT_TAG}"' io_scene_lwo/blender_manifest.toml
 	sed -i '/\"version/c\
     "version": (${GIT_TAGX}),' io_scene_lwo/__init__.py
 	sed -i '/\"blender/c\
-    "blender": (2, 81, 0),' io_scene_lwo/__init__.py
+    "blender": (5, 2, 0),' io_scene_lwo/__init__.py
 	sed -i '/expect_version = (1/c\
     expect_version = (${GIT_TAGX})'  tests/basic/test_version.py
 	git add io_scene_lwo/blender_manifest.toml io_scene_lwo/__init__.py tests/basic/test_version.py
@@ -65,7 +61,7 @@ version = "${GIT_TAG}"' io_scene_lwo/blender_manifest.toml
 	sed -i '/\"version/c\
     "version": (${GIT_TAGX}),' io_scene_lwo/__init__.py
 	sed -i '/\"blender/c\
-    "blender": (2, 81, 0),' io_scene_lwo/__init__.py
+    "blender": (5, 2, 0),' io_scene_lwo/__init__.py
 	sed -i '/expect_version = (1/c\
     expect_version = (${GIT_TAGX})'  tests/basic/test_version.py
 # 	sed -i 'expect_version//c\

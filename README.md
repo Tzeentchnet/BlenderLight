@@ -1,52 +1,74 @@
-[![Build Status](https://travis-ci.org/nangtani/blender-import-lwo.svg?branch=master)](https://travis-ci.org/nangtani/blender-import-lwo)
-[![codecov](https://codecov.io/gh/nangtani/blender-import-lwo/branch/master/graph/badge.svg)](https://codecov.io/gh/nangtani/blender-import-lwo)
-[![Gitter](https://badges.gitter.im/nangtani/blender-import-lwo.svg)](https://gitter.im/nangtani/blender-import-lwo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
-# Download ADDON here:
-What you see here is a project wrapped around an addon to enable testing, the addon itself is the subdirectory, `io_scene_lwo`.  If you just want the addon it is maintained in the release area:
-[releases](https://github.com/nangtani/blender-import-lwo/releases)
+[![Blender 5.2 tests](https://github.com/Tzeentchnet/BlenderLight/actions/workflows/test_io_scene_lwo.yml/badge.svg)](https://github.com/Tzeentchnet/BlenderLight/actions/workflows/test_io_scene_lwo.yml)
 
-# Blender LWO Importer
+# BlenderLight
 
-This is a [lightwave](https://www.lightwave3d.com/) importer addon for [Blender](https://www.blender.org/). 
+BlenderLight is a Blender 5.2 extension for importing LightWave object files.
+It is a fork of
+[nangtani/blender-import-lwo](https://github.com/nangtani/blender-import-lwo)
+and retains the original importer authorship and history.
 
-It reads a lightwave object file, LWO, and converts it into a mesh with materials inside blender.
+## Requirements
 
-This design was forked from the blender-addons repo before it was removed from that [repo](https://github.com/nangtani/blender-addons/commit/31608d8ee37bd753573a10482a2514787b80f923).
+- Blender 5.2 LTS or newer
+- No external Python packages: Blender's bundled NumPy is used for bulk mesh,
+  UV, color, normal, shape-key, and crease data transfer
 
-* Support LWO and LWO2 format
-* Support for cycles
-* GUI navigation for missing images directory
-* NGON support for keyhole NGONs
-* PrincipleBSDF support
-* LWO parsing is wholly in it's own module, no blender elements, it can be used in other non blender projects.
-* Regressable tests with checked in LWO examples
+## Supported formats and data
 
-## blender-addon-tester 
+- LightWave 4/5 `LWOB` and layered `LWLO`
+- LightWave 6+ `LWO2`
+- LightWave 2018+ `LWO3`
+- Multi-layer meshes and layer parenting
+- Faces, subpatches, Catmull-Clark subdivision, and native Blender n-gons
+- Surface assignments and core surface parameters
+- LWO3 standard-node values and color image references
+- Point and discontinuous UV maps
+- RGB/RGBA color attributes
+- Weight maps, relative/absolute morphs, edge creases, and custom normals
+- Skelegon-to-armature conversion
+- Blender 5.2 extension packaging and file drag-and-drop
 
-Tests exist for this addon. Tests are written in `pytest` and are enabled using the [`blender-addon-tester`](https://pypi.org/project/blender-addon-tester).  
+See [LightWave handler research](docs/lightwave-handler-research.md) for the
+reference implementations reviewed and the next coverage targets.
 
-This allows testing to be completed on multiple versions of blender, including the nightly builds.  This flags any changes to the Blender Addon API that breaks the addon closer to when it happens.
+## Install
 
-Current testing supports blender 3.3 through 4.5.
+Build the extension package with Blender 5.2:
 
-To run tests locally:
+```powershell
+& "D:\Blender Foundation\Blender 5.2\blender.exe" `
+  --command extension build `
+  --source-dir io_scene_lwo `
+  --output-dir dist
+```
 
-    `pip install blender-addon-tester`
-    `python scripts\test_addon.py io_scene_lwo 3.6`
+In Blender, open **Edit > Preferences > Get Extensions**, use the menu in the
+top-right, choose **Install from Disk**, and select the generated
+`blenderlight-2.0.0.zip`.
 
-## Not supported (yet)
+After installation, use **File > Import > LightWave Object (.lwo)** or drag an
+`.lwo`, `.lwo2`, or `.lwo3` file into the 3D View.
 
-* Lightwave Scene files, LWS
-* LWO3
+## Development and tests
 
-## Questions or Issues
+The checked-in fixture corpus covers LWOB, LWO2, and LWO3 objects. To run the
+add-on test harness:
 
-Please raise any issues or requests via the [github issues page](https://github.com/nangtani/blender-import-lwo/issues).
+```powershell
+python -m pip install -r blender_requirements.txt
+python scripts\test_addon.py io_scene_lwo 5.2
+```
 
-## LWO Specification
+CI runs the suite on Blender 5.2 for Windows and Linux.
 
-You can find the LWO2 format specification found [here](../../wiki/LWO2-file-format-(2001)).
+## Current limitations
 
-# Old Addon
+- LightWave scene (`.lws`) files are not imported.
+- LWO3 geometry, core standard materials, UVs, and color textures are
+  supported; arbitrary node graphs, envelopes, procedural textures, gradients,
+  and every third-party node are not yet translated.
+- Non-UV planar, cylindrical, cubic, and spherical image projections are
+  parsed but are not yet converted to Blender mapping nodes.
 
-The original addon can be found in the official addon repos [here](https://github.com/nangtani/blender-addons-contrib/blob/b1a19799d2ec0dc320b8064d281ee81a1f018b9a/io_import_scene_lwo.py).
+Please report reproducible gaps with a small redistributable fixture in the
+[issue tracker](https://github.com/Tzeentchnet/BlenderLight/issues).
