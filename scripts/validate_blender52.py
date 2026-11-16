@@ -12,19 +12,7 @@ import io_scene_lwo  # noqa: E402
 
 
 def clear_scene():
-    for obj in list(bpy.data.objects):
-        bpy.data.objects.remove(obj, do_unlink=True)
-
-    for collection in (
-        bpy.data.meshes,
-        bpy.data.curves,
-        bpy.data.armatures,
-        bpy.data.materials,
-        bpy.data.images,
-    ):
-        for data_block in list(collection):
-            if data_block.users == 0:
-                collection.remove(data_block)
+    bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
 def fixture_files():

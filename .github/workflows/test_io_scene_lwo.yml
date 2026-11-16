@@ -88,7 +88,13 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          set +e
           "${BLENDER_CACHE}/blender-${BLENDER_VERSION}-linux-x64/blender" \
             --background \
             --factory-startup \
             --python scripts/validate_blender52.py
+          status=$?
+          if [[ -f /tmp/blender.crash.txt ]]; then
+            cat /tmp/blender.crash.txt
+          fi
+          exit "${status}"
